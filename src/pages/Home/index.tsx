@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Play } from 'phosphor-react'
+import { HandPalm, Play } from 'phosphor-react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as zod from 'zod'
@@ -12,6 +12,7 @@ import {
   MinutesAmountInput,
   Separator,
   StartCountdownButton,
+  StopCountdownButton,
   TaskInput,
 } from './styles'
 
@@ -19,7 +20,7 @@ const newCycleFormValidationSchema = zod.object({
   task: zod.string().min(1, 'Informe a tarefa'),
   minutesAmount: zod
     .number()
-    .min(5, 'O ciclo deve ser no mínimo 5 minutos')
+    .min(1, 'O ciclo deve ser no mínimo 5 minutos')
     .max(60, 'O ciclo deve ser no máximo 60 minutos'),
 })
 
@@ -30,6 +31,8 @@ interface Cycle {
   task: string
   minutesAmount: number
   startDate: Date
+  interruptedDate?: Date
+  finishedDate?: Date
 }
 
 export function Home() {
@@ -86,17 +89,38 @@ export function Home() {
     let interval: number
     if (activeCycle) {
       interval = setInterval(() => {
-        // compara a data atual com a data de inicio do ciclo para ter a conategem de segundo mais precisa
-        setAmountSecondsPassed(
-          differenceInSeconds(new Date(), activeCycle.startDate),
+        const secondsDifference = differenceInSeconds(
+          new Date(),
+          activeCycle.startDate,
         )
+
+        // se já chegou no total de segundos, conclui o ciclo
+        if (secondsDifference >= totalSeconds) {
+          setCycles((state) =>
+            state.map((s) => {
+              if (s.id === activeCycleId) {
+                return {
+                  ...s,
+                  finishedDate: new Date(),
+                }
+              }
+              return s
+            }),
+          )
+
+          setAmountSecondsPassed(totalSeconds)
+          clearInterval(interval)
+        } else {
+          // compara a data atual com a data de inicio do ciclo para ter a conategem de segundo mais precisa
+          setAmountSecondsPassed(secondsDifference)
+        }
       }, 1000)
     }
 
     return () => {
       clearInterval(interval)
     }
-  }, [activeCycle])
+  }, [activeCycle, activeCycleId, totalSeconds])
 
   const onSubmit = useCallback(
     (data: NewCycleFormData) => {
@@ -117,6 +141,21 @@ export function Home() {
     },
     [reset],
   )
+
+  const handleInterruptCycle = useCallback(() => {
+    setCycles((state) =>
+      state.map((s) => {
+        if (s.id === activeCycleId) {
+          return {
+            ...s,
+            interruptedDate: new Date(),
+          }
+        }
+        return s
+      }),
+    )
+    setActiveCycleId(null)
+  }, [activeCycleId])
 
   useEffect(() => {
     if (activeCycle) {
@@ -139,6 +178,7 @@ export function Home() {
             type="text"
             placeholder="De um nome para o seu projeto"
             list="task-sugestions"
+            disabled={!!activeCycle}
             {...register('task')}
           />
 
@@ -155,9 +195,10 @@ export function Home() {
             id="minutesAmount"
             type="number"
             placeholder="00"
-            step={5}
-            min={5}
+            step={1}
+            min={1}
             max={60}
+            disabled={!!activeCycle}
             {...register('minutesAmount', { valueAsNumber: true })}
           />
 
@@ -172,10 +213,17 @@ export function Home() {
           <span>{seconds[1]}</span>
         </CountdownContainer>
 
-        <StartCountdownButton type="submit" disabled={isSubmitDisabled}>
-          <Play size={24} />
-          Começar
-        </StartCountdownButton>
+        {activeCycle ? (
+          <StopCountdownButton type="button" onClick={handleInterruptCycle}>
+            <HandPalm size={24} />
+            Interromper
+          </StopCountdownButton>
+        ) : (
+          <StartCountdownButton type="submit" disabled={isSubmitDisabled}>
+            <Play size={24} />
+            Começar
+          </StartCountdownButton>
+        )}
       </form>
     </HomeContainer>
   )
